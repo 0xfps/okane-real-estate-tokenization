@@ -1,0 +1,39 @@
+{
+  "name": "okane-real-estate-tokenization",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^1.0.5",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.7",
+    "@nomicfoundation/hardhat-toolbox": "^2.0.0",
+    "hardhat": "^2.12.4",
+    "hardhat-deploy": "^0.11.26"
+  },
+  "browserslist": [
+    "> 5%"
+  ],
+  "dependencies": {
+    "@alch/alchemy-web3": "^1.4.7",
+    "@chainlink/contracts": "^0.6.1",
+    "@openzeppelin/contracts": "^4.8.2",
+    "@openzeppelin/contracts-upgradeable": "^4.8.2",
+    "@openzeppelin/test-helpers": "^0.5.16",
+    "alchemy-sdk": "^2.8.1",
+    "chai": "^4.3.7",
+    "dotenv": "^16.0.3",
+    "ethers": "^5.7.2",
+    "react": "^18.2.0",
+    "solc": "^0.8.7-fixed",
+    "solidity_flattener": "^1.0.0",
+    "truffle": "^5.8.3",
+    "truffle-flattener": "^1.6.0",
+    "web3": "^1.9.0"
+  }
+}
