@@ -37,10 +37,13 @@ contract RealEstateV1 is ERC1155URIStorage, Ownable {
 
     Counters.Counter private _tokenIds;
 
+    // Change this on deployment.
+    address public constant TETHER = 0xcd198e12CD9a2Fe20BC81f437b863f61f2D5C2Df;
+
     string public name;
     string public symbol;
     // uint256 public currentPropertySupply;
-    uint256 public constant INITAL_PROPERTY_PRICE = 50;
+    uint256 public constant INITIAL_PROPERTY_PRICE = 50;
 
     // Put an enum with cancelled, open, sold;
 
@@ -58,9 +61,9 @@ contract RealEstateV1 is ERC1155URIStorage, Ownable {
 
     // Property[] public propertyList;
     mapping(uint256 => Property) public tokenIdToProperty;
-    mapping(uint => bool) public checkTokenSupplyStatus;
-    mapping(uint => uint) public totalTokenSupplyForAGivenProperty;
-    mapping(uint => string) public tokenIdToImageLink;
+    mapping(uint256 => bool) public checkTokenSupplyStatus;
+    mapping(uint256 => uint) public totalTokenSupplyForAGivenProperty;
+    mapping(uint256 => string) public tokenIdToImageLink;
 
     constructor() ERC1155("") {
         name = "Wakaru";
@@ -68,6 +71,7 @@ contract RealEstateV1 is ERC1155URIStorage, Ownable {
     }
 
     function getTokenURI(uint256 _tokenId) public view returns (string memory) {
+        if (!checkTokenSupplyStatus[_tokenId]) revert("Wakaru: TOKEN_INEXISTENT");
         bytes memory dataURI = abi.encodePacked(
             "{",
             '"name": "',
@@ -99,34 +103,35 @@ contract RealEstateV1 is ERC1155URIStorage, Ownable {
 
     function getTotalTokens(
         uint256 _tokenId
-    ) public view returns (string memory) {
-        uint256 totalTokens = tokenIdToProperty[_tokenId].totalTokens;
-        return totalTokens.toString();
+    ) public view returns (uint256) {
+        if (!checkTokenSupplyStatus[_tokenId]) revert("Wakaru: TOKEN_INEXISTENT");
+        // To be converted to string on the frontend.
+        return tokenIdToProperty[_tokenId].totalTokens;
     }
 
     function getTokensSold(
         uint256 _tokenId
-    ) public view returns (string memory) {
-        uint256 tokensSold = tokenIdToProperty[_tokenId].tokensSold;
-        return tokensSold.toString();
+    ) public view returns (uint256) {
+        if (!checkTokenSupplyStatus[_tokenId]) revert("Wakaru: TOKEN_INEXISTENT");
+        // To be converted to string on the frontend.
+        return tokenIdToProperty[_tokenId].tokensSold;
     }
 
     function getCountry(uint256 _tokenId) public view returns (string memory) {
-        string memory country = tokenIdToProperty[_tokenId].country;
-        return country;
+        if (!checkTokenSupplyStatus[_tokenId]) revert("Wakaru: TOKEN_INEXISTENT");
+        return tokenIdToProperty[_tokenId].country;
     }
 
     function getPropertyName(
         uint256 _tokenId
     ) public view returns (string memory) {
+        if (!checkTokenSupplyStatus[_tokenId]) revert("Wakaru: TOKEN_INEXISTENT");
         string memory propertyName = tokenIdToProperty[_tokenId].name;
-        propertyName = string(
-            abi.encodePacked("Property #", _tokenId.toString())
-        );
         return propertyName;
     }
 
     function addAPropertyToSell(
+        string memory _name,
         uint256 _totalTokens,
         string memory country,
         string memory image_link
@@ -137,7 +142,7 @@ contract RealEstateV1 is ERC1155URIStorage, Ownable {
         checkTokenSupplyStatus[currentTokenId] = true;
 
         Property memory currentProperty = Property(
-            getPropertyName(currentTokenId),
+            _name,
             _totalTokens,
             0,
             country
@@ -152,6 +157,7 @@ contract RealEstateV1 is ERC1155URIStorage, Ownable {
         uint256 _propertyId,
         bool _newStatus
     ) public onlyOwner {
+        if (!checkTokenSupplyStatus[_propertyId]) revert("Wakaru: TOKEN_INEXISTENT");
         checkTokenSupplyStatus[_propertyId] = _newStatus;
     }
 
@@ -161,40 +167,39 @@ contract RealEstateV1 is ERC1155URIStorage, Ownable {
             "The property you would like to buy is not available in this time!"
         );
 
-        IUSDT tether = IUSDT(
-            address(0xcd198e12CD9a2Fe20BC81f437b863f61f2D5C2Df)
-        ); // Mega Token Currently
+        Property storage currentProperty = tokenIdToProperty[_propertyId];
+
+        require(
+            currentProperty.totalTokens >=
+            (currentProperty.tokensSold.add(_amount)),
+            "There are no available tokens left for selected amount!"
+        );
+
+        currentProperty.tokensSold += _amount;
+
+        IUSDT tether = IUSDT(TETHER); // Mega Token Currently
 
         uint256 decimal = tether.decimals();
 
         tether.transferFrom(
             msg.sender,
             address(this),
-            _amount.mul(50).mul(10 ** decimal)
+            _amount.mul(INITIAL_PROPERTY_PRICE).mul(10 ** decimal)
         );
+
+        _mint(msg.sender, _propertyId, _amount, "");
 
         // How will we add a defense mechanism over here?
 
         // require(propertyTokenPrice.mul(_amount) <= msg.value, "Not enough USDT supplied!");
-
-        Property storage currentProperty = tokenIdToProperty[_propertyId];
-
-        require(
-            currentProperty.totalTokens >=
-                (currentProperty.tokensSold.add(_amount)),
-            "There are no available tokens left for selected amount!"
-        );
-
-        currentProperty.tokensSold += _amount;
-
-        _mint(msg.sender, _propertyId, _amount, "");
     }
 
     // Implement a withdraw for USDT
 
     function withdrawEther() public onlyOwner {
-        uint balance = address(this).balance;
-        payable(msg.sender).transfer(balance);
+        uint256 balance = address(this).balance;
+        (bool sent, ) = payable(msg.sender).call{value: balance}("");
+        if (!sent) revert("Wakaru: ETH_NOT_SENT");
     }
 
     // Function to withdraw ERC20 tokens to the owner's account
@@ -202,21 +207,19 @@ contract RealEstateV1 is ERC1155URIStorage, Ownable {
         uint256 amount,
         address _tokenAddress
     ) external onlyOwner {
-        require(amount > 0, "Withdrawal amount must be greater than zero");
+        require(amount != 0, "Withdrawal amount must be greater than zero");
 
-        IUSDT tetherToken = IUSDT(_tokenAddress);
+        IERC20 token = IERC20(_tokenAddress);
 
-        tetherToken.transfer(owner(), amount);
-
-        // Transfer tokens from the contract to the owner
-        // require(tetherToken.transfer(owner(), amount), "Token transfer failed");
+        bool sent = token.transfer(owner(), amount);
+        if (!sent) revert("Wakaru: TOKEN_NOT_SENT");
     }
 
     // Function to withdraw USDT _tokenAddress will be USDT address on the mainnet, check polygon USDT as well THO
     function withdrawUSDT(uint256 amount) external onlyOwner {
-        require(amount > 0, "Withdrawal amount must be greater than zero");
+        require(amount != 0, "Withdrawal amount must be greater than zero");
 
-        IUSDT usdt = IUSDT(0xcd198e12CD9a2Fe20BC81f437b863f61f2D5C2Df);
+        IUSDT usdt = IUSDT(TETHER);
 
         // Transfer tokens from the contract to the owner
         usdt.transfer(owner(), amount);
